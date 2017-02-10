@@ -1,0 +1,26 @@
+<%= link_to "All Events", events_path %>
+
+<%- if @event.errors.any? %>
+  <%= @event.errors.full_messages.to_sentence %>
+<%- end %>
+
+<%= form_for @event do |f| %>
+
+  <fieldset>
+    <%= f.label :name %>
+    <%= f.text_field :name %>
+  </fieldset>
+
+  <fieldset>
+    <%= f.label :start_date %>
+    <%= f.date_field :start_date %>
+  </fieldset>
+
+  <fieldset>
+    <%= f.label :end_date %>
+    <%= f.date_field :end_date %>
+  </fieldset>
+
+  <%= f.submit %>
+
+<%- end %>

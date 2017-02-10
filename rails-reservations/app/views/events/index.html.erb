@@ -1,0 +1,10 @@
+<h1>Events</h1>
+
+<%= link_to "New Event", new_event_path %>
+
+<ul>
+<%- @events.each do |event| %>
+  <%- description = "#{event.name} from #{event.start_date} to #{event.end_date}" %>
+  <li><%= description %> - <%= link_to "Edit", edit_event_path(event) %></li>
+<%- end %>
+</ul>
