@@ -66,7 +66,9 @@ defmodule Reservations.Event do
 
   def validate_unique_name(changeset) do
     name = get_field(changeset, :name)
-    if is_binary(name) do
+    if is_nil(name) do
+      changeset
+    else
       dups_query = from e in Event, where: e.name == ^name
 
       # For updates, don't flag event as a dup of itself
@@ -88,8 +90,6 @@ defmodule Reservations.Event do
       else
         changeset
       end
-    else
-      changeset
     end
   end
 
