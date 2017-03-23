@@ -67,6 +67,25 @@ defmodule Reservations.EventTest do
       assert match? [name: {_message, [validation: :validate_unique_name]}], second.errors
     end
 
+    test "doesn't blow up if the changeset being validated has no name" do
+      first = Event.changeset(
+        %Event{}, %{
+          name: "Summer Bash 2016",
+          start_date: %{year: 2016, month: 6, day: 14},
+          end_date:   %{year: 2016, month: 6, day: 15},
+        }
+      )
+      first |> Repo.insert!
+
+      second = Event.cast_params(
+        %Event{}, %{
+          start_date: %{year: 2016, month: 7, day: 14},
+          end_date:   %{year: 2016, month: 7, day: 15},
+        }
+      ) |> Event.run_validations
+      refute match? [name: {_message, [validation: :validate_unique_name]}], second.errors
+    end
+
     test "ignores the original event when looking for duplicate names" do
       first = Event.changeset(
         %Event{}, %{
@@ -142,6 +161,24 @@ defmodule Reservations.EventTest do
         ) |> Event.run_validations
         refute match? [base: {_message, [validation: :validate_no_overlaps]}], second.errors
       end)
+    end
+
+    test "doesn't blow up if the changeset being validated is missing one or more dates" do
+      first = Event.changeset(
+        %Event{}, %{
+          name: "Summer Bash 2016",
+          start_date: %{year: 2016, month: 6, day: 14},
+          end_date:   %{year: 2016, month: 6, day: 15},
+        }
+      )
+      first |> Repo.insert!
+
+      second = Event.cast_params(
+       %Event{}, %{
+         name: "Water Balloon Mania 2016",
+       }
+      ) |> Event.run_validations
+      refute match? [base: {_message, [validation: :validate_no_overlaps]}], second.errors
     end
 
     test "ignores the original event when looking for overlaps" do
