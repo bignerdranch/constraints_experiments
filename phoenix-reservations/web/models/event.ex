@@ -30,7 +30,7 @@ defmodule Reservations.Event do
   def run_validations(struct) do
     struct
     |> validate_in_memory
-    |> validate_against_database
+    |> unsafe_validate_against_repo
   end
 
   def validate_in_memory(struct) do
@@ -39,10 +39,14 @@ defmodule Reservations.Event do
     |> validate_positive_duration
   end
 
-  def validate_against_database(struct) do
+  # These validations are "unsafe" because they can't prevent race conditions;
+  # we must also have constraints to reliably prevent conflicting data.
+  # But in most cases, these will enable a user to fix conflicting data at the
+  # same time that they correct (eg) blank fields.
+  def unsafe_validate_against_repo(struct) do
     struct
-    |> validate_unique_name
-    |> validate_no_overlaps
+    |> validate_no_conflicts_unreliably(:name, &find_conflicting_names/1, "has already been taken")
+    |> validate_no_conflicts_unreliably(:base, &find_overlapping_dates/1, "may not overlap another event")
   end
 
   def prepare_for_constraints(struct) do
@@ -64,10 +68,25 @@ defmodule Reservations.Event do
     end
   end
 
-  def validate_unique_name(changeset) do
+  def validate_no_conflicts_unreliably(changeset, field_name, conflict_finder_func, error_message) do
+    conflicts = conflict_finder_func.(changeset)
+
+    if Enum.any?(conflicts) do
+      add_error(
+                changeset,
+                field_name,
+                error_message,
+                [validation: :validate_no_conflicts_unreliably]
+              )
+    else
+      changeset
+    end
+  end
+
+  defp find_conflicting_names(changeset) do
     name = get_field(changeset, :name)
     if is_nil(name) do
-      changeset
+      []
     else
       dups_query = from e in Event, where: e.name == ^name
 
@@ -79,25 +98,15 @@ defmodule Reservations.Event do
         from e in dups_query, where: e.id != ^id
       end
 
-      dups = dups_query |> Reservations.Repo.all
-      if Enum.any?(dups) do
-        add_error(
-          changeset,
-          :name,
-          "has already been taken",
-          [validation: :validate_unique_name]
-        )
-      else
-        changeset
-      end
+      Reservations.Repo.all(dups_query)
     end
   end
 
-  def validate_no_overlaps(changeset) do
+  defp find_overlapping_dates(changeset) do
     start_date = get_field(changeset, :start_date)
     end_date = get_field(changeset, :end_date)
     if is_nil(start_date) or is_nil(end_date) do
-      changeset
+      []
     else
 
       overlap_query = Event
@@ -111,17 +120,7 @@ defmodule Reservations.Event do
         from e in overlap_query, where: e.id != ^id
       end
 
-      overlaps = overlap_query |> Reservations.Repo.all
-      if Enum.any?(overlaps) do
-        add_error(
-          changeset,
-          :base,
-          "cannot overlap dates with another event",
-          [validation: :validate_no_overlaps]
-        )
-      else
-        changeset
-      end
+      Reservations.Repo.all(overlap_query)
     end
   end
 

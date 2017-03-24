@@ -64,7 +64,16 @@ defmodule Reservations.EventTest do
           end_date:   %{year: 2016, month: 7, day: 15},
         }
       ) |> Event.run_validations
-      assert match? [name: {_message, [validation: :validate_unique_name]}], second.errors
+      assert match? [name: {_message, [validation: :validate_no_conflicts_unreliably]}], second.errors
+
+      second = Event.cast_params(
+        %Event{}, %{
+          name: "Some Other Event Name",
+          start_date: %{year: 2016, month: 7, day: 14},
+          end_date:   %{year: 2016, month: 7, day: 15},
+        }
+      ) |> Event.run_validations
+      refute match? [name: {_message, [validation: :validate_no_conflicts_unreliably]}], second.errors
     end
 
     test "doesn't blow up if the changeset being validated has no name" do
@@ -148,7 +157,7 @@ defmodule Reservations.EventTest do
            end_date:   %{year: 2016, month: 6, day: end_day},
          }
         ) |> Event.run_validations
-        assert match? [base: {_message, [validation: :validate_no_overlaps]}], second.errors
+      assert match? [base: {_message, [validation: :validate_no_conflicts_unreliably]}], second.errors
       end)
 
       Enum.each([{12, 13}, {16, 17}], fn ({start_day, end_day}) ->
@@ -159,7 +168,7 @@ defmodule Reservations.EventTest do
            end_date:   %{year: 2016, month: 6, day: end_day},
          }
         ) |> Event.run_validations
-        refute match? [base: {_message, [validation: :validate_no_overlaps]}], second.errors
+      refute match? [base: {_message, [validation: :validate_no_conflicts_unreliably]}], second.errors
       end)
     end
 
