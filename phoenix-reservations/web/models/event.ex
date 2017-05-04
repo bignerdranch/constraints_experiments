@@ -1,6 +1,7 @@
 defmodule Reservations.Event do
   use Reservations.Web, :model
   alias Reservations.Event
+  alias Reservations.Repo
 
   schema "events" do
     field :name, :string
@@ -45,8 +46,8 @@ defmodule Reservations.Event do
   # same time that they correct (eg) blank fields.
   def unsafe_validate_against_repo(struct) do
     struct
-    |> validate_no_conflicts_unreliably(:name, &find_conflicting_names/1, "has already been taken")
-    |> validate_no_conflicts_unreliably(:base, &find_overlapping_dates/1, "may not overlap another event")
+    |> validate_no_conflicts_unreliably(:name, &any_conflicting_names?/1, "has already been taken")
+    |> validate_no_conflicts_unreliably(:base, &any_overlapping_dates?/1, "may not overlap another event")
   end
 
   def prepare_for_constraints(struct) do
@@ -69,9 +70,9 @@ defmodule Reservations.Event do
   end
 
   def validate_no_conflicts_unreliably(changeset, field_name, conflict_finder_func, error_message) do
-    conflicts = conflict_finder_func.(changeset)
+    conflicts? = conflict_finder_func.(changeset)
 
-    if Enum.any?(conflicts) do
+    if conflicts? do
       add_error(
                 changeset,
                 field_name,
@@ -83,28 +84,37 @@ defmodule Reservations.Event do
     end
   end
 
-  defp find_conflicting_names(changeset) do
-    name = get_field(changeset, :name)
-    if is_nil(name) do
-      []
-    else
-      dups_query = from e in Event, where: e.name == ^name
-
-      # For updates, don't flag event as a dup of itself
-      id = get_field(changeset, :id)
-      dups_query = if is_nil(id) do
-        dups_query
-      else
-        from e in dups_query, where: e.id != ^id
-      end
-
-      Reservations.Repo.all(dups_query)
+  defp validate_title_unused(:title, title) do
+    case Repo.get_by(Post, title: title) do
+      nil -> []
+      _ -> [title: "already in use"]
     end
   end
 
-  defp find_overlapping_dates(changeset) do
-    start_date = get_field(changeset, :start_date)
-    end_date = get_field(changeset, :end_date)
+  defp any_conflicting_names?(changeset = %Ecto.Changeset{changes: %{name: name}}) when not is_nil(name) do
+    case name do
+      nil -> false
+      _ ->
+        dups_query = from e in Event, where: e.name == ^name
+        # For updates, don't flag event as a dup of itself
+        id = get_field(changeset, :id)
+        dups_query = if is_nil(id) do
+          dups_query
+        else
+          from e in dups_query, where: e.id != ^id
+        end
+
+        exists_query = from q in dups_query, select: true, limit: 1
+        case Repo.one(exists_query) do
+          true -> true
+          nil  -> false
+        end
+    end
+  end
+
+  defp any_conflicting_names?(_changeset), do: false
+
+  defp any_overlapping_dates?(changeset = %Ecto.Changeset{changes: %{start_date: start_date, end_date: end_date}}) when not is_nil(start_date) and not is_nil(end_date) do
     if is_nil(start_date) or is_nil(end_date) do
       []
     else
@@ -120,8 +130,13 @@ defmodule Reservations.Event do
         from e in overlap_query, where: e.id != ^id
       end
 
-      Reservations.Repo.all(overlap_query)
+      exists_query = from q in overlap_query, select: true, limit: 1
+      case Repo.one(exists_query) do
+        true -> true
+        nil  -> false
+      end
     end
   end
 
+  defp any_overlapping_dates?(_changeset), do: false
 end
