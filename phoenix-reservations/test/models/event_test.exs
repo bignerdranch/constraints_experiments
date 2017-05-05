@@ -64,7 +64,7 @@ defmodule Reservations.EventTest do
           end_date:   %{year: 2016, month: 7, day: 15},
         }
       ) |> Event.run_validations
-      assert match? [name: {_message, [validation: :validate_no_conflicting_names]}], second.errors
+      assert match? [name: {_message, [validation: [:validate_unique_unreliably, [:name]]]}], second.errors
 
       second = Event.cast_params(
         %Event{}, %{
@@ -73,7 +73,7 @@ defmodule Reservations.EventTest do
           end_date:   %{year: 2016, month: 7, day: 15},
         }
       ) |> Event.run_validations
-      refute match? [name: {_message, [validation: :validate_no_conflicting_names]}], second.errors
+      refute match? [name: {_message, [validation: [:validate_unique_unreliably, [:name]]]}], second.errors
     end
 
     test "doesn't blow up if the changeset being validated has no name" do

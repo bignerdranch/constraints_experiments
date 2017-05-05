@@ -46,7 +46,7 @@ defmodule Reservations.Event do
   # same time that they correct (eg) blank fields.
   def unsafe_validate_against_repo(struct) do
     struct
-    |> validate_no_conflicting_names()
+    |> validate_unique_unreliably([:name], Repo, :name, "must provide a unique value")
     |> validate_no_overlapping_dates()
   end
 
@@ -66,6 +66,37 @@ defmodule Reservations.Event do
       "start date cannot be before end date",
       [validation: :validate_positive_duration]
       )
+    end
+  end
+
+  def validate_unique_unreliably(changeset, field_names, repo, error_field, error_message \\ "must be unique") do
+    where_clause = Enum.map(field_names, fn (field_name) ->
+      {field_name, get_field(changeset, field_name)}
+    end)
+
+    if Enum.any?(where_clause, fn (tuple) -> is_nil(elem(tuple, 1)) end) do
+      changeset
+    else
+      dups_query = Ecto.Query.from q in __MODULE__, where: ^where_clause
+
+      # For updates, don't flag record as a dup of itself
+      changeset_id = get_field(changeset, :id)
+      dups_query = if is_nil(changeset_id) do
+        dups_query
+      else
+        from q in dups_query, where: q.id != ^changeset_id
+      end
+
+      dups_exists_query = from q in dups_query, select: true, limit: 1
+      case repo.one(dups_exists_query) do
+        true -> add_error(
+          changeset,
+          error_field,
+          error_message,
+          [validation: [:validate_unique_unreliably, field_names]]
+        )
+        nil  -> changeset
+      end
     end
   end
 
